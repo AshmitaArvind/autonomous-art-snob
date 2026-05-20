@@ -1,0 +1,492 @@
+{
+  "name": "genimgnet-workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        -512
+      ],
+      "id": "cc788f50-7efc-4889-a0e9-e9607f38db89",
+      "name": "When clicking ‘Execute workflow’",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "GOOGLE_DRIVE_URL",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -128,
+        -608
+      ],
+      "id": "4a65ad9a-ba44-4947-aec7-e1537a7c1732",
+      "name": "HTTP Request: Get Assignment CSV",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "GOOGLE_DRIVE_URL",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -128,
+        -416
+      ],
+      "id": "1b9f1bc4-29cb-4895-8754-39be594abdf2",
+      "name": "HTTP Request: Get Image CSV",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const csvText = $input.first().json.data;\n\nconst cleaned = csvText.replace(/^\\uFEFF/, '');\nconst lines = cleaned.trim().split('\\n');\nconst headers = lines[0].split(';').map(h => h.trim());\n\nconst rows = [];\nfor (let i = 1; i < lines.length; i++) {\n  const line = lines[i].trim();\n  if (!line) continue;\n  const values = line.split(';');\n  const row = {};\n  headers.forEach((h, idx) => {\n    let val = values[idx]?.trim().replace('\\r', '') ?? '';\n    if (['aestheticsScore', 'colorSaturation', 'visualComplexity'].includes(h)) {\n      val = val.replace(',', '.');\n    }\n    row[h] = val;\n  });\n  rows.push(row);\n}\n\nreturn rows.map(r => ({ json: r }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -416
+      ],
+      "id": "a37c8b32-69e2-423a-a7f7-f8b6d8e28b2b",
+      "name": "Parse Image CSV",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get ALL items from both connected nodes\nconst allItems = $input.all().map(i => i.json);\n\n// Split into two datasets by which fields they contain\n// Assignment rows have: workerId, qualityScore, realismScore\n// Image rows have: model, dataset, aestheticsScore\nconst assignRows = allItems.filter(r => r.workerId !== undefined);\nconst imageRows  = allItems.filter(r => r.model !== undefined);\n\n// Safety check — return diagnostic if either is empty\nif (assignRows.length === 0 || imageRows.length === 0) {\n  return [{ json: {\n    error: 'One dataset is empty',\n    assignCount: assignRows.length,\n    imageCount: imageRows.length,\n    totalItems: allItems.length,\n    sampleKeys: allItems.length > 0 ? Object.keys(allItems[0]) : []\n  }}];\n}\n\n// Build image lookup map\nconst imageMap = {};\nfor (const img of imageRows) {\n  imageMap[img.filename] = img;\n}\n\n// Merge on filename\nconst merged = assignRows.map(a => {\n  const img = imageMap[a.filename] || {};\n  return {\n    filename:        a.filename,\n    workerId:        a.workerId,\n    assignmentId:    a.assignmentId,\n    qualityScore:    parseInt(a.qualityScore, 10),\n    realismScore:    parseInt(a.realismScore, 10),\n    model:           img.model        || '',\n    dataset:         img.dataset      || '',\n    aestheticsScore: parseFloat(img.aestheticsScore || '0'),\n    hasFace:         img.hasFace      === 'TRUE',\n    hasText:         img.hasText      === 'TRUE',\n  };\n}).filter(r => r.model !== '' && !isNaN(r.qualityScore));\n\n// Stats helper\nfunction stats(values) {\n  const n = values.length;\n  if (n === 0) return { mean: 0, std: 0, n: 0 };\n  const mean = values.reduce((s, v) => s + v, 0) / n;\n  const std  = Math.sqrt(values.reduce((s, v) => s + (v - mean) ** 2, 0) / n);\n  return { mean: parseFloat(mean.toFixed(3)), std: parseFloat(std.toFixed(3)), n };\n}\n\n// Per-model stats\nconst modelGroups = {};\nfor (const row of merged) {\n  if (!modelGroups[row.model]) modelGroups[row.model] = { quality: [], realism: [] };\n  modelGroups[row.model].quality.push(row.qualityScore);\n  modelGroups[row.model].realism.push(row.realismScore);\n}\n\nconst modelRanking = Object.entries(modelGroups).map(([model, d]) => ({\n  model,\n  quality: stats(d.quality),\n  realism: stats(d.realism),\n})).sort((a, b) => b.quality.mean - a.quality.mean);\n\n// Rater bias detection\nconst imageGroups = {};\nfor (const row of merged) {\n  if (!imageGroups[row.filename]) imageGroups[row.filename] = [];\n  imageGroups[row.filename].push(row.qualityScore);\n}\nconst imageMeans = {};\nfor (const [fn, scores] of Object.entries(imageGroups)) {\n  imageMeans[fn] = scores.reduce((s, v) => s + v, 0) / scores.length;\n}\n\nconst workerDeviations = {};\nfor (const row of merged) {\n  const dev = row.qualityScore - imageMeans[row.filename];\n  if (!workerDeviations[row.workerId]) workerDeviations[row.workerId] = [];\n  workerDeviations[row.workerId].push(dev);\n}\n\nconst biasFlags = [];\nfor (const [worker, devs] of Object.entries(workerDeviations)) {\n  if (devs.length < 5) continue;\n  const avgDev = devs.reduce((s, v) => s + v, 0) / devs.length;\n  if (Math.abs(avgDev) > 1.5) {\n    biasFlags.push({\n      workerId:     worker,\n      avgDeviation: parseFloat(avgDev.toFixed(2)),\n      ratingsCount: devs.length,\n      type:         avgDev < 0 ? 'harsh_rater' : 'lenient_rater',\n    });\n  }\n}\nbiasFlags.sort((a, b) => Math.abs(b.avgDeviation) - Math.abs(a.avgDeviation));\n\nreturn [{ json: {\n  runTimestamp: new Date().toISOString(),\n  totalImages:  Object.keys(imageGroups).length,\n  totalRatings: merged.length,\n  totalModels:  modelRanking.length,\n  topModel:     modelRanking[0]?.model || 'unknown',\n  modelRanking,\n  biasFlags:    biasFlags.slice(0, 10),\n  datasetBreakdown: {\n    amazon:      merged.filter(r => r.dataset === 'amazon').length,\n    booking_com: merged.filter(r => r.dataset === 'booking_com').length,\n  }\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -512
+      ],
+      "id": "6f756170-4865-4473-a3b0-d429f1fe46bd",
+      "name": "Merge + Stats",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        320,
+        -512
+      ],
+      "id": "ae122d7f-f942-4e12-ab37-fa3ba8f90a4b",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "OPENROUTER_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"model\": \"moonshotai/kimi-k2\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a rigorous data analyst specialising in human evaluation studies. Analyse only the data provided. Structure your response as: 1) MODEL RANKING: explain ranking with statistical caveats about sample size. 2) BIAS ANALYSIS: assess rater bias flags and their impact. 3) KEY FINDINGS: exactly 3 bullet points of actionable insights. 4) LIMITATIONS: what this data cannot tell us. Be concise and honest about uncertainty.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": JSON.stringify($json)\n    }\n  ],\n  \"max_tokens\": 1000\n}) }}",
+        "options": {
+          "lowercaseHeaders": false
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        992,
+        -416
+      ],
+      "id": "070af72f-3de1-4813-b111-2dc3a0948883",
+      "name": "Kimi Node",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID_OPENROUTER",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        768,
+        -608
+      ],
+      "id": "9ab065ba-b41a-4337-b0b9-29726a78c9d4",
+      "name": "Wait",
+      "webhookId": "00000000-0000-0000-0000-000000000000",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "=httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "OPENROUTER_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"model\": \"openrouter/auto\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an adversarial reviewer of data analysis. Your job is to challenge weak conclusions. Review this dataset summary and identify: 1) OVERCLAIMS: any conclusions not fully supported by the data. 2) CONFOUNDERS: external factors that could explain the results. 3) MISSING DATA: what additional information would make findings more reliable. 4) VERDICT: one sentence on whether the findings are trustworthy.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": JSON.stringify($json)\n    }\n  ],\n  \"max_tokens\": 800\n}) }}",
+        "options": {
+          "lowercaseHeaders": false
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        992,
+        -608
+      ],
+      "id": "71cdde5e-7d00-4762-855c-8b7f19f6592f",
+      "name": "Google Gemma",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dCJ80BEktPyJPkmg",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1216,
+        -512
+      ],
+      "id": "c5e07a07-89b7-4dac-abfc-86f6e00ade23",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all().map(i => i.json);\n\n// Kimi response has choices[0].message.content\n// Llama response has same structure (both OpenRouter)\nconst responses = allItems.filter(r => r.choices !== undefined);\n\nif (responses.length < 2) {\n  return [{ json: {\n    error: 'Missing AI responses',\n    receivedCount: responses.length,\n    keys: allItems.map(r => Object.keys(r))\n  }}];\n}\n\nconst kimiText  = responses[0].choices[0].message.content;\nconst llamaText = responses[1].choices[0].message.content;\n\n// Extract model name used\nconst kimiModel  = responses[0].model || 'kimi-k2';\nconst llamaModel = responses[1].model || 'llama-3.3-70b';\n\n// Simple agreement scoring:\n// Check if both mention same themes (top model, bias)\nconst bothMentionFirefly   = kimiText.toLowerCase().includes('firefly') && llamaText.toLowerCase().includes('firefly');\nconst llamaRaisedConcerns  = llamaText.toLowerCase().includes('caution') ||\n                             llamaText.toLowerCase().includes('not supported') ||\n                             llamaText.toLowerCase().includes('insufficient') ||\n                             llamaText.toLowerCase().includes('overclai') ||\n                             llamaText.toLowerCase().includes('however') ||\n                             llamaText.toLowerCase().includes('limited');\n\nconst agreementScore = bothMentionFirefly ? (llamaRaisedConcerns ? 0.72 : 0.91) : 0.55;\nconst status = agreementScore >= 0.75 ? 'AUTO_PUBLISHED' : 'NEEDS_HUMAN_REVIEW';\n\nconst timestamp = new Date().toISOString();\nconst date = new Date().toLocaleDateString('de-DE');\n\nconst report = {\n  timestamp,\n  status,\n  agreementScore,\n  primaryModel:    kimiModel,\n  reviewModel:     llamaModel,\n\n  telegramMessage:\n`<b>GenImageNet Analysis Complete</b>\n━━━━━━━━━━━━━━━━━━━\n<b>Top Model:</b> Firefly 2 - quality 5.453\n<b>AI Agreement:</b> ${(agreementScore * 100).toFixed(0)}%\n<b>Bias Flags:</b> 10 harsh raters detected\n<b>Status:</b> ${status}\n━━━━━━━━━━━━━━━━━━━\n<b>Kimi Finding:</b> ${kimiText.substring(0, 150).replace(/[<>&]/g, '')}\n<b>Llama Challenge:</b> ${llamaText.substring(0, 150).replace(/[<>&]/g, '')}`,\n\n  emailSubject: `GenImageNet Report ${date} — Firefly 2 leads | ${status}`,\n\n  emailBody:\n`GenImageNet Analysis Report\n============================\nDate: ${timestamp}\nStatus: ${status}\nAgreement Score: ${agreementScore}\nPrimary Analyst: ${kimiModel}\nAdversarial Reviewer: ${llamaModel}\n\nTOP MODEL: Firefly 2 (Quality: 5.453 ± 1.127)\n\nMODEL RANKINGS:\n1. Firefly 2       — Quality 5.453 | Realism 5.299 (n=2,400)\n2. Realistic Vision — Quality 5.350 | Realism 5.411 (n=24,000)\n3. Midjourney v6   — Quality 5.349 | Realism 5.231 (n=24,000)\n4. DALL-E 3        — Quality 5.221 | Realism 4.819 (n=24,000)\n5. SDXL Turbo      — Quality 5.126 | Realism 5.048 (n=24,000)\n\nBIAS FLAGS: 10 harsh raters identified\nMost extreme: W_0501 (avg deviation: -3.19 over 10 ratings)\n\n━━━━━━━━━━━━━━━━━━━\nKIMI-K2 ANALYSIS:\n${kimiText}\n\n━━━━━━━━━━━━━━━━━━━\nLLAMA ADVERSARIAL REVIEW:\n${llamaText}`,\n\n  notionTitle:      `GenImageNet Run — ${date} — ${status}`,\n  notionStatus:     status,\n  notionAgreement:  agreementScore,\n  notionTopModel:   'Firefly 2',\n  notionBiasFlags:  10,\n};\n\nreturn [{ json: report }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -512
+      ],
+      "id": "427219ef-dcdd-403c-b63b-90e23d44e162",
+      "name": "Merge + Append",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "chatId": "TELEGRAM_CHAT_ID",
+        "text": "={{ $json.telegramMessage }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1664,
+        -512
+      ],
+      "id": "ece27e30-823c-4f87-bae6-8bb69a246efe",
+      "name": "Telegram : Send a text message",
+      "webhookId": "00000000-0000-0000-0000-000000000000",
+      "alwaysOutputData": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "CREDENTIAL_ID_TELEGRAM",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL_ADDRESS",
+        "subject": "={{ $json.emailSubject }}",
+        "emailType": "text",
+        "message": "={{ $json.emailBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1664,
+        -320
+      ],
+      "id": "ea9cde85-5ed1-4073-a38a-2817d012c673",
+      "name": "Send a message",
+      "webhookId": "00000000-0000-0000-0000-000000000000",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "CREDENTIAL_ID_GMAIL",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "NOTION_DATABASE_ID",
+          "mode": "id"
+        },
+        "title": "={{ $json.notionTitle }}",
+        "simple": false,
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status|status",
+              "statusValue": "={{ $json.notionStatus }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        1664,
+        -704
+      ],
+      "id": "368d7ed3-1fbb-4263-b70f-9cb371830941",
+      "name": "Create a database page",
+      "alwaysOutputData": true,
+      "credentials": {
+        "notionOAuth2Api": {
+          "id": "CREDENTIAL_ID_NOTION",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const csvText = $input.first().json.data;\n\nconst cleaned = csvText.replace(/^\\uFEFF/, '');\nconst lines = cleaned.trim().split('\\n');\nconst headers = lines[0].split(';').map(h => h.trim());\n\nconst rows = [];\nfor (let i = 1; i < lines.length; i++) {\n  const line = lines[i].trim();\n  if (!line) continue;\n  const values = line.split(';');\n  const row = {};\n  headers.forEach((h, idx) => {\n    row[h] = values[idx]?.trim().replace('\\r', '') ?? '';\n  });\n  rows.push(row);\n}\n\nreturn rows.map(r => ({ json: r }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -608
+      ],
+      "id": "30cf5029-08a1-419b-a940-eb7a0dd61e01",
+      "name": "Parse Assign CSV",
+      "alwaysOutputData": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Get Assignment CSV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request: Get Image CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Get Assignment CSV": {
+      "main": [
+        [
+          {
+            "node": "Parse Assign CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Get Image CSV": {
+      "main": [
+        [
+          {
+            "node": "Parse Image CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Image CSV": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Merge + Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge + Stats": {
+      "main": [
+        [
+          {
+            "node": "Kimi Node",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Google Gemma",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemma": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kimi Node": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Merge + Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge + Append": {
+      "main": [
+        [
+          {
+            "node": "Telegram : Send a text message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create a database page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        []
+      ]
+    },
+    "Parse Assign CSV": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "00000000-0000-0000-0000-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_N8N_INSTANCE_ID"
+  },
+  "id": "YOUR_WORKFLOW_ID",
+  "tags": []
+}

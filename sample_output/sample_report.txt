@@ -1,0 +1,44 @@
+GenImageNet Analysis Report
+============================
+Date: 2026-05-20T12:40:09.551Z
+Status: AUTO_PUBLISHED
+Agreement Score: 0.91
+Primary Analyst: google/gemini-2.5-flash-lite
+Adversarial Reviewer: moonshotai/kimi-k2
+
+TOP MODEL: Firefly 2 (Quality: 5.453 +/- 1.127)
+
+MODEL RANKINGS:
+1. Firefly 2        -- Quality 5.453 | Realism 5.299 | Std 1.127 (n=2,400)  [!] small sample
+2. Realistic Vision -- Quality 5.350 | Realism 5.411 | Std 1.159 (n=24,000)
+3. Midjourney v6    -- Quality 5.349 | Realism 5.231 | Std 1.170 (n=24,000)
+4. Imagine          -- Quality 5.336 | Realism 5.161 | Std 1.161 (n=2,400)  [!] small sample
+5. Imagen 2         -- Quality 5.308 | Realism 5.143 | Std 1.181 (n=2,400)  [!] small sample
+6. DALL-E 3         -- Quality 5.221 | Realism 4.819 | Std 1.250 (n=24,000)
+7. SDXL Turbo       -- Quality 5.126 | Realism 5.048 | Std 1.324 (n=24,000)
+
+DATASET BREAKDOWN:
+  Amazon:        12,900 ratings
+  Booking.com:   12,900 ratings
+  Total Images:  10,320
+  Total Ratings: 103,200
+  Raters pool:   1,200+
+
+BIAS FLAGS DETECTED: 10 harsh raters (0 lenient)
+  W_0501 -- avg deviation: -3.19 over 10 ratings  [harsh_rater]
+  W_0592 -- avg deviation: -2.98 over 9 ratings   [harsh_rater]
+  W_0202 -- avg deviation: -2.93 over 10 ratings  [harsh_rater]
+  W_0273 -- avg deviation: -2.41 over 21 ratings  [harsh_rater]
+  W_0391 -- avg deviation: -2.37 over 13 ratings  [harsh_rater]
+  W_0477 -- avg deviation: -1.98 over 32 ratings  [harsh_rater]
+  W_0570 -- avg deviation: -1.88 over 89 ratings  [harsh_rater]
+  W_0415 -- avg deviation: -1.86 over 30 ratings  [harsh_rater]
+  W_0987 -- avg deviation: -1.78 over 55 ratings  [harsh_rater]
+  W_0747 -- avg deviation: -1.70 over 35 ratings  [harsh_rater]
+
+NOTE: All flagged workers are harsh raters (negative deviation).
+No lenient raters were detected above the |1.5| threshold.
+Flagged ratings represent <0.3% of total dataset -- negligible impact on rankings.
+
+=====================================
+GEMINI 2.5 FLASH LITE -- PRIMARY ANAL
