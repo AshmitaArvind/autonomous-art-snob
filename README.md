@@ -1,6 +1,6 @@
 # 🤖 GenImageNet Agentic AI Pipeline
 
-> An end-to-end automated workflow that analyses 103,200 human ratings of AI-generated marketing images, runs dual-AI peer review, detects rater bias, and delivers reports to Telegram, Gmail and Notion — all on autopilot.
+> An end-to-end automated workflow that analyses 103,200 human ratings of AI-generated marketing images, runs dual-AI peer review, detects rater bias, and delivers reports to Telegram, Gmail and Notion. All on autopilot.
 
 ![n8n](https://img.shields.io/badge/Built%20with-n8n-orange?style=flat-square)
 ![OpenRouter](https://img.shields.io/badge/LLMs-OpenRouter-blue?style=flat-square)
@@ -10,7 +10,7 @@
 
 ## 📌 What This Does
 
-This pipeline processes the [GenImageNet dataset](https://openbigdata.org/resource/ai-generated-marketing-images-10k-human-ratings-for-quality-and-realism/) — 10,320 AI-generated marketing images rated by human workers for **quality** and **realism** on a 1–7 scale.
+This pipeline processes the [GenImageNet dataset](https://openbigdata.org/resource/ai-generated-marketing-images-10k-human-ratings-for-quality-and-realism/), 10,320 AI-generated marketing images rated by human workers for **quality** and **realism** on a 1-7 scale.
 
 The workflow:
 1. Fetches two CSV files (image metadata + human ratings) from Google Drive
@@ -43,7 +43,10 @@ Trigger
 
 ---
 
-## 📊 Key Findings (from real run)
+## 📊 Key Findings (from real run, May 2026)
+
+> ⚠️ **Disclaimer:** These findings reflect one run of this pipeline on a specific dataset snapshot.  
+> They are intended as a demonstration of the pipeline's capabilities, not as a definitive benchmark of AI model quality. Do not use these rankings for commercial model selection without independent validation.
 
 | Model | Mean Quality | Mean Realism | Sample Size |
 |---|---|---|---|
@@ -54,7 +57,7 @@ Trigger
 | DALL-E 3 | 5.221 | 4.819 | 24,000 |
 | SDXL Turbo | 5.126 | 5.048 | 24,000 |
 
-> ⚠️ Note: Firefly 2 and Imagine have 10x fewer ratings than the others — their rankings should be interpreted with caution.
+> ⚠️ Note: Firefly 2 and Imagine have 10x fewer ratings than the others- their rankings should be interpreted with caution.
 
 ---
 
@@ -66,6 +69,10 @@ The workflow deliberately uses **two different AI models** to avoid single-model
 - **Adversarial Reviewer (Llama 3.3 70B):** Actively challenges the findings, looks for overclaims, confounders, and missing data
 
 An **agreement score** is calculated. If ≥ 75%, the report is marked `AUTO_PUBLISHED`. Below that threshold it is flagged `NEEDS_HUMAN_REVIEW`.
+
+> ⚠️ AI-generated analysis (Kimi-K2 and Llama 3.3 70B) is used for pattern summarisation only. 
+> All LLM outputs should be treated as assistive commentary, not authoritative conclusions.  
+> The statistical calculations (means, standard deviations, bias flags) are deterministic JavaScript and can be trusted as accurate, while the narrative interpretation is AI-assisted and should be treated as commentary rather than authoritative conclusion.
 
 ---
 
@@ -144,11 +151,14 @@ autonomous-art-snob/
 
 ## 📜 Dataset Credit
 
-**GenImageNet** — AI-Generated Marketing Images: 10K Human Ratings for Quality and Realism  
+**GenImageNet** - AI-Generated Marketing Images: 10K Human Ratings for Quality and Realism  
 Source: [openbigdata.org](https://openbigdata.org/resource/ai-generated-marketing-images-10k-human-ratings-for-quality-and-realism/)
 
+> This project uses the GenImageNet dataset for research and educational purposes only.  
+> Please review the dataset's original license before any commercial use.  
+> All findings are based on the publicly available version of this dataset as of May 2026.
 ---
 
 ## 🪪 License
 
-MIT — free to use, modify, and share with attribution.
+MIT : free to use, modify, and distribute.
