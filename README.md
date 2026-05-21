@@ -32,7 +32,7 @@ Trigger
                                                                ↓
                                                         Merge + Stats
                                                        ↙          ↘
-                                         Kimi-K2 Analysis   Llama 3.3 70B Review
+                                         Kimi-K2 Analysis   OpenRouter Auto Review
                                                         ↘           ↙
                                                          Merge(Append)
                                                                ↓
@@ -67,11 +67,11 @@ Trigger
 The workflow deliberately uses **two different AI models** to avoid single-model bias:
 
 - **Primary Analyst (Kimi-K2):** Produces structured findings on model rankings, bias impact, and actionable insights
-- **Adversarial Reviewer (Llama 3.3 70B):** Actively challenges the findings, looks for overclaims, confounders, and missing data
+- **Adversarial Reviewer (OpenRouter Auto):** Actively challenges the findings, looks for overclaims, confounders, and missing data
 
 An **agreement score** is calculated. If ≥ 75%, the report is marked `AUTO_PUBLISHED`. Below that threshold it is flagged `NEEDS_HUMAN_REVIEW` and waits for manual review before publishing.
 
-> ⚠️ AI-generated analysis (Kimi-K2 and Llama 3.3 70B) is used for pattern summarisation only.  
+> ⚠️ AI-generated analysis (Kimi-K2 and Openrouter) is used for pattern summarisation only.  
 > All LLM outputs should be treated as assistive commentary, not authoritative conclusions.  
 > The statistical calculations (means, standard deviations, bias flags) are deterministic JavaScript and can be trusted as accurate, while the narrative interpretation is AI-assisted and should be treated as commentary rather than authoritative conclusion.
 
@@ -95,7 +95,7 @@ In this dataset, **60 workers were flagged in total: 30 harsh raters and 30 leni
 | Workflow engine | n8n Cloud |
 | Data source | Google Drive (CSV) |
 | Primary LLM | Kimi-K2 via OpenRouter |
-| Review LLM | Llama 3.3 70B via OpenRouter |
+| Review LLM | OpenRouter Auto |
 | Alerts | Telegram Bot API |
 | Reports | Gmail |
 | Logging | Notion Database |
