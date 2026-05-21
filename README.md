@@ -1,4 +1,4 @@
-# 🤖 GenImageNet Agentic AI Pipeline
+# GenImageNet Agentic AI Pipeline
 
 > An end-to-end automated workflow that analyses 103,200 human assignments from the GenImageNet dataset, runs dual-AI peer review, detects rater bias, and delivers reports to Telegram, Gmail and Notion. All on autopilot.
 
@@ -8,7 +8,7 @@
 
 ---
 
-## 📌 What This Does
+## What This Does
 
 This pipeline processes the [GenImageNet dataset](https://openbigdata.org/resource/ai-generated-marketing-images-10k-human-ratings-for-quality-and-realism/), 10,320 AI-generated marketing images rated by human workers across 103,200 individual assignments, drawn from 254,400 total assessments covering **quality, realism, aesthetics, creativity, adherence to prompt and overall marketing effectiveness** on a 1-7 scale.
 
@@ -23,7 +23,7 @@ The workflow:
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 Trigger
@@ -43,7 +43,7 @@ Trigger
 
 ---
 
-## 📊 Key Findings (from real run, May 2026)
+## Key Findings (from real run, May 2026)
 
 > ⚠️ **Disclaimer:** These findings reflect one run of this pipeline on a specific dataset snapshot.  
 > They are intended as a demonstration of the pipeline's capabilities, not as a definitive benchmark of AI model quality. Do not use these rankings for commercial model selection without independent validation.
@@ -62,7 +62,7 @@ Trigger
 
 ---
 
-## 🧠 Dual-AI Peer Review
+## Dual-AI Peer Review
 
 The workflow deliberately uses **two different AI models** to avoid single-model bias:
 
@@ -77,7 +77,7 @@ An **agreement score** is calculated. If ≥ 75%, the report is marked `AUTO_PUB
 
 ---
 
-## 🔍 Bias & Variance Detection
+## Bias & Variance Detection
 
 Each rater's average deviation from the crowd mean is calculated per image. Workers with |avgDeviation| > 1.5 across ≥ 5 ratings are flagged:
 
@@ -88,7 +88,7 @@ In this dataset, **60 workers were flagged in total: 30 harsh raters and 30 leni
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Component | Tool |
 |---|---|
@@ -102,7 +102,7 @@ In this dataset, **60 workers were flagged in total: 30 harsh raters and 30 leni
 
 ---
 
-## 🚀 Setup Instructions
+## Setup Instructions
 
 ### 1. Prerequisites
 - n8n Cloud account (or self-hosted via Docker)
@@ -136,7 +136,7 @@ Click **Execute Workflow** in n8n. Full run takes ~30–45 seconds.
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 autonomous-art-snob/
@@ -145,14 +145,15 @@ autonomous-art-snob/
 ├── sample_output/
 │   └── sample_report.txt  # Example report output
 └── docs/
-    └── flow_diagram.png   # Visual workflow diagram
+    ├── n8n-genimgnet.png  # Visual workflow diagram
+    └── notion_view.png    # Notion Database view
 ```
 
 ---
 
-## 📜 Dataset Credit
+## Dataset Credit
 
-**GenImageNet** - AI-Generated Marketing Images: 10K Human Ratings for Quality and Realism  
+**GenImageNet** - [AI-Generated Marketing Images: 10K Human Ratings for Quality and Realism](https://openbigdata.org/resource/ai-generated-marketing-images-10k-human-ratings-for-quality-and-realism/)  
 Source: [openbigdata.org](https://openbigdata.org/resource/ai-generated-marketing-images-10k-human-ratings-for-quality-and-realism/)
 
 > This project uses the GenImageNet dataset for research and educational purposes only.  
@@ -161,6 +162,6 @@ Source: [openbigdata.org](https://openbigdata.org/resource/ai-generated-marketin
 
 ---
 
-## 🪪 License
+## License
 
 MIT : free to use, modify, and distribute.
